@@ -9,7 +9,7 @@ const int THREADS_PER_DIM = 16;
 
 namespace MatrixCommon
 {
-    __host__ void add(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
+    void add(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
     {
         // Set kernal parameters
         int blocks_y = (a_m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -45,7 +45,7 @@ namespace MatrixCommon
         }
     }
 
-    __host__ void subtract(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
+    void subtract(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
     {
         // Set kernal parameters
         int blocks_y = (a_m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -81,7 +81,7 @@ namespace MatrixCommon
         }
     }
 
-    __host__ void multiply(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
+    void multiply(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
     {
         if (a_n != b_m)
         {
@@ -106,7 +106,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void hadamardProduct(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
+    void hadamardProduct(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
     {
         if (a_m != b_m || a_n != b_n)
         {
@@ -131,7 +131,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void divide(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
+    void divide(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
     {
         if (a_m != b_m || a_n != b_n)
         {
@@ -156,7 +156,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
     
-    __host__ void add(double* a, double num, double* b, int m, int n)
+    void add(double* a, double num, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -170,7 +170,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void subtract(double* a, double num, double* b, int m, int n)
+    void subtract(double* a, double num, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -184,7 +184,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void multiply(double* a, double num, double* b, int m, int n)
+    void multiply(double* a, double num, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -198,7 +198,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void divide(double* a, double num, double* b, int m, int n)
+    void divide(double* a, double num, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -212,7 +212,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void transpose(double* a, double* b, int m, int n)
+    void transpose(double* a, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -226,7 +226,32 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void sigmoid(double* a, double* b, int m, int n)
+    void cross_entropy(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
+    {
+        if (a_m != b_m || a_n != b_n)
+        {
+            std::ostringstream err;
+            err << "Invalid dimensions: cannot compute cross entropy of "
+                << a_m << "x" << a_n
+                << " matrix and "
+                << b_m << "x" << b_n
+                << " matrix.";
+            throw std::invalid_argument(err.str()); 
+        }
+
+        // Set kernal parameters
+        int blocks_y = (a_m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (a_n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::cross_entropy<<<BLOCKS,THREADS>>>(a, b, c, a_m, a_n);
+        cudaDeviceSynchronize();
+    }
+
+    void sigmoid(double* a, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -240,7 +265,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void d_sigmoid(double* a, double* b, int m, int n)
+    void d_sigmoid(double* a, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -254,7 +279,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void tanh(double* a, double* b, int m, int n)
+    void tanh(double* a, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -268,7 +293,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void d_tanh(double* a, double* b, int m, int n)
+    void d_tanh(double* a, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -282,7 +307,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void relu(double* a, double* b, int m, int n)
+    void relu(double* a, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -296,7 +321,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void d_relu(double* a, double* b, int m, int n)
+    void d_relu(double* a, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
@@ -310,7 +335,7 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
-    __host__ void log(double* a, double* b, int m, int n)
+    void log(double* a, double* b, int m, int n)
     {
         // Set kernal parameters
         int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;

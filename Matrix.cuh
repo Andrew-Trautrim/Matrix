@@ -50,6 +50,9 @@ class MatrixExpr
         __host__ NumExpr<A> operator/(double num) const;
         __host__ NumExpr<A> operator-(double num) const;
 
+        // Static binary expressions
+        template<typename B> static __host__ BinaryExpr<A, B> cross_entropy(const MatrixExpr<A>& a, const MatrixExpr<B>& b);
+
         // Static unary expressions
         static __host__ UnaryExpr<A> sigmoid(const MatrixExpr<A>& a);
         static __host__ UnaryExpr<A> d_sigmoid(const MatrixExpr<A>& a);
@@ -70,7 +73,7 @@ class MatrixExpr
         
         __host__ double* evaluate(const Matrix& result) const;
         __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool aliases(double* a) const;
+        __host__ bool references(double* a) const;
 };
 
 class Matrix : public MatrixExpr<Matrix>
@@ -109,7 +112,7 @@ class Matrix : public MatrixExpr<Matrix>
 
         double* evaluate(const Matrix& result) const;
         double* evaluate(const Buffer& result) const;
-        bool aliases(double* a) const;
+        bool references(double* a) const;
 };
 
 template<typename L, typename R>
@@ -121,19 +124,19 @@ class BinaryExpr : public MatrixExpr<BinaryExpr<L, R>>
     template<typename E> friend class UnaryExpr;
 
     public:
-        BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_aliasing);
+        BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_referencing = true);
 
     private:
         const L& lhs;
         const R& rhs;
 
-        bool self_aliasing; // bool to determine if the expression allowed to reference the result
+        bool self_referencing; // bool to determine if the expression allowed to reference the result
 
         std::function<void (double*, double*, double*, int, int, int, int)> eval;
 
         __host__ double* evaluate(const Matrix& result) const;
         __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool aliases(double* a) const;
+        __host__ bool references(double* a) const;
 };
 
 template<typename E>
@@ -154,7 +157,7 @@ class UnaryExpr : public MatrixExpr<UnaryExpr<E>>
 
         __host__ double* evaluate(const Matrix& result) const;
         __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool aliases(double* a) const;
+        __host__ bool references(double* a) const;
 };
 
 template<typename E>
@@ -176,7 +179,7 @@ class NumExpr : public MatrixExpr<NumExpr<E>>
 
         __host__ double* evaluate(const Matrix& result) const;
         __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool aliases(double* a) const;
+        __host__ bool references(double* a) const;
 };
 
 /*
@@ -263,7 +266,7 @@ BinaryExpr<A, B> MatrixExpr<A>::operator+(const MatrixExpr<B>& other) const
         MatrixCommon::add(a, b, c, a_m, a_n, b_m, b_n);
     };
 
-    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval);
 }
 
 template<typename A>
@@ -275,7 +278,7 @@ BinaryExpr<A, B> MatrixExpr<A>::operator-(const MatrixExpr<B>& other) const
         MatrixCommon::subtract(a, b, c, a_m, a_n, b_m, b_n);
     };
 
-    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval);
 }
 
 template<typename A>
@@ -299,7 +302,7 @@ BinaryExpr<A, B> MatrixExpr<A>::operator&(const MatrixExpr<B>& other) const
         MatrixCommon::hadamardProduct(a, b, c, a_m, a_n, b_m, b_n);
     };
 
-    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval);
 }
 
 template<typename A>
@@ -311,7 +314,19 @@ BinaryExpr<A, B> MatrixExpr<A>::operator/(const MatrixExpr<B>& other) const
         MatrixCommon::divide(a, b, c, a_m, a_n, b_m, b_n);
     };
 
-    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval);
+}
+
+template<typename A>
+template<typename B>
+BinaryExpr<A, B> MatrixExpr<A>::cross_entropy(const MatrixExpr<A>& a, const MatrixExpr<B>& b)
+{
+    auto eval = [](double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n) 
+    {
+        MatrixCommon::cross_entropy(a, b, c, a_m, a_n, b_m, b_n);
+    };
+
+    return BinaryExpr<A, B>(static_cast<const A&>(a), static_cast<const B&>(b), eval);
 }
 
 template<typename E>
@@ -448,9 +463,9 @@ double* MatrixExpr<A>::evaluate(const Buffer& result) const
 }
 
 template<typename A>
-bool MatrixExpr<A>::aliases(double* a) const
+bool MatrixExpr<A>::references(double* a) const
 {
-    return static_cast<const A&>(*this).aliases(a);
+    return static_cast<const A&>(*this).references(a);
 }
 
 // PROTECTED
@@ -508,9 +523,9 @@ template<typename A>
 inline std::unordered_map<int, std::stack<Buffer>> MatrixExpr<A>::buffers;
 
 template<typename L, typename R>
-BinaryExpr<L, R>::BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_aliasing) 
+BinaryExpr<L, R>::BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_referencing) 
     : MatrixExpr<BinaryExpr<L, R>>(lhs.m, lhs.n), 
-        lhs(lhs), rhs(rhs), eval(eval), self_aliasing(self_aliasing)
+        lhs(lhs), rhs(rhs), eval(eval), self_referencing(self_referencing)
 {
 }
 
@@ -524,7 +539,7 @@ double* BinaryExpr<L, R>::evaluate(const Matrix& result) const
     // Can we use the result as a buffer?
     if (std::is_same_v<L, Matrix> || (
             result.m * result.n == lhs.m * lhs.n && 
-            !rhs.aliases(result.data.get())))
+            !rhs.references(result.data.get())))
     {
         lhs_result = lhs.evaluate(result);
     }
@@ -542,7 +557,7 @@ double* BinaryExpr<L, R>::evaluate(const Matrix& result) const
     if (std::is_same_v<R, Matrix> || (
             lhs_result != result.data.get() && 
             result.m * result.n == rhs.m * rhs.n && 
-            !lhs.aliases(result.data.get())))
+            !lhs.references(result.data.get())))
     {
         rhs_result = rhs.evaluate(result);
     }
@@ -555,7 +570,7 @@ double* BinaryExpr<L, R>::evaluate(const Matrix& result) const
     // if we have something like a = a * b then we must store the result in a buffer
     Buffer result_buff { nullptr, 0 };
     double* accumulator = result.data.get();
-    if (!self_aliasing && (lhs_result == result.data.get() || rhs_result == result.data.get()))
+    if (!self_referencing && (lhs_result == result.data.get() || rhs_result == result.data.get()))
     {
         result_buff = this->getBuffer(result.m * result.n);
         accumulator = result_buff.data.get();
@@ -606,7 +621,7 @@ double* BinaryExpr<L, R>::evaluate(const Buffer& result) const
     // if we have something like a = a * b then we must store the result in a buffer
     Buffer result_buff { nullptr, 0 };
     double* accumulator = result.data.get();
-    if (!self_aliasing && (lhs_result == result.data.get() || rhs_result == result.data.get()))
+    if (!self_referencing && (lhs_result == result.data.get() || rhs_result == result.data.get()))
     {
         result_buff = this->getBuffer(result.size);
         accumulator = result_buff.data.get();
@@ -622,9 +637,9 @@ double* BinaryExpr<L, R>::evaluate(const Buffer& result) const
 }
 
 template<typename L, typename R>
-bool BinaryExpr<L, R>::aliases(double* a) const
+bool BinaryExpr<L, R>::references(double* a) const
 {
-    return lhs.aliases(a) || rhs.aliases(a);
+    return lhs.references(a) || rhs.references(a);
 }
 
 /*
@@ -689,9 +704,9 @@ double* NumExpr<E>::evaluate(const Buffer& result) const
 }
 
 template<typename E>
-bool NumExpr<E>::aliases(double* a) const
+bool NumExpr<E>::references(double* a) const
 {
-    return expr.aliases(a);
+    return expr.references(a);
 }
 
 /*
@@ -756,9 +771,9 @@ double* UnaryExpr<E>::evaluate(const Buffer& result) const
 }
 
 template<typename E>
-bool UnaryExpr<E>::aliases(double* a) const
+bool UnaryExpr<E>::references(double* a) const
 {
-    return expr.aliases(a);
+    return expr.references(a);
 }
 
 #endif // MATRIX_H

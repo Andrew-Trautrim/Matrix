@@ -47,7 +47,7 @@ double* Matrix::evaluate(const Buffer& result) const
     return data.get();
 }
 
-bool Matrix::aliases(double* a) const
+bool Matrix::references(double* a) const
 {
     return data.get() == a;
 }
