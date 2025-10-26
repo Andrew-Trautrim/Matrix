@@ -211,4 +211,18 @@ namespace MatrixCommon
         MatrixKernals::divide<<<BLOCKS,THREADS>>>(a, num, b, m, n);
         cudaDeviceSynchronize();
     }
+
+    __host__ void transpose(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::transpose<<<BLOCKS,THREADS>>>(a, b, m, n);
+        cudaDeviceSynchronize();
+    }
 }

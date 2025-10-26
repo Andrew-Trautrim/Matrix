@@ -13,6 +13,7 @@
 
 class Matrix;
 template<typename L, typename R> class BinaryExpr;
+template<typename E> class UnaryExpr;
 template<typename E> class NumExpr;
 
 struct Buffer
@@ -26,6 +27,7 @@ class MatrixExpr
 {
     friend class Matrix;
     template<typename L, typename R> friend class BinaryExpr;
+    template<typename E> friend class UnaryExpr;
     template<typename E> friend class NumExpr;
 
     public:
@@ -38,6 +40,9 @@ class MatrixExpr
         template<typename B> __host__ BinaryExpr<A, B> operator*(const MatrixExpr<B>& other) const;
         template<typename B> __host__ BinaryExpr<A, B> operator&(const MatrixExpr<B>& other) const;
         template<typename B> __host__ BinaryExpr<A, B> operator/(const MatrixExpr<B>& other) const;
+
+        // Unary expressions
+        __host__ UnaryExpr<A> transpose() const;
         
         // Num expressions
         __host__ NumExpr<A> operator+(double num) const;
@@ -63,6 +68,7 @@ class MatrixExpr
 class Matrix : public MatrixExpr<Matrix>
 {
     template<typename L, typename R> friend class BinaryExpr;
+    template<typename E> friend class UnaryExpr;
     template<typename E> friend class NumExpr;
 
     public:
@@ -81,6 +87,8 @@ class Matrix : public MatrixExpr<Matrix>
         using MatrixExpr<Matrix>::operator-;
         using MatrixExpr<Matrix>::operator*;
         using MatrixExpr<Matrix>::operator/;
+        
+        using MatrixExpr<Matrix>::transpose;
 
         double* evaluate(const Matrix& result) const;
         double* evaluate(const Buffer& result) const;
@@ -128,6 +136,22 @@ class NumExpr : public MatrixExpr<NumExpr<E>>
         double num;
 
         std::function<void (double*, double, double*, int, int)> eval;
+};
+
+template<typename E>
+class UnaryExpr : public MatrixExpr<UnaryExpr<E>>
+{
+    public:
+        UnaryExpr(const E& expr, std::function<void (double*, double*, int, int)> eval);
+
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool aliases(double* a) const;
+
+    private:
+        const E& expr;
+
+        std::function<void (double*, double*, int, int)> eval;
 };
 
 /*
@@ -259,6 +283,17 @@ BinaryExpr<A, B> MatrixExpr<A>::operator/(const MatrixExpr<B>& other) const
     };
 
     return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::transpose() const
+{
+    auto eval = [](double* a, double* b, int a_m, int a_n) 
+    { 
+        MatrixCommon::transpose(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(*this), eval);
 }
 
 template<typename E>
@@ -560,6 +595,73 @@ double* NumExpr<E>::evaluate(const Buffer& result) const
 
 template<typename E>
 bool NumExpr<E>::aliases(double* a) const
+{
+    return expr.aliases(a);
+}
+
+/*
+ * UnaryExpr class
+ */
+
+template<typename E>
+UnaryExpr<E>::UnaryExpr(const E& expr, std::function<void (double*, double*, int, int)> eval) 
+    : MatrixExpr<UnaryExpr<E>>(expr.m, expr.n), 
+        expr(expr), eval(eval)
+{
+}
+
+template<typename E>
+double* UnaryExpr<E>::evaluate(const Matrix& result) const 
+{
+    // Evaluate sub-expression
+    Buffer buff { nullptr, 0 };
+    double* expr_result;
+
+    // Can we use the result as a buffer?
+    if (std::is_same_v<E, Matrix> || result.m * result.n == expr.m * expr.n)
+    {
+        expr_result = expr.evaluate(result);
+    }
+    else 
+    {
+        buff = this->getBuffer(expr.m * expr.n);
+        expr_result = expr.evaluate(buff);
+    }
+
+    eval(expr_result, result.data.get(), expr.m, expr.n);
+
+    this->releaseBuffer(buff);
+
+    return result.data.get();
+}
+
+template<typename E>
+double* UnaryExpr<E>::evaluate(const Buffer& result) const 
+{
+    // Evaluate sub-expression
+    Buffer buff { nullptr, 0 };
+    double* expr_result;
+
+    // Can we use the result as a buffer?
+    if (std::is_same_v<E, Matrix> || result.size == expr.m * expr.n)
+    {
+        expr_result = expr.evaluate(result);
+    }
+    else 
+    {
+        buff = this->getBuffer(expr.m * expr.n);
+        expr_result = expr.evaluate(buff);
+    }
+
+    eval(expr_result, result.data.get(), expr.m, expr.n);
+
+    this->releaseBuffer(buff);
+
+    return result.data.get();
+}
+
+template<typename E>
+bool UnaryExpr<E>::aliases(double* a) const
 {
     return expr.aliases(a);
 }

@@ -12,4 +12,6 @@ namespace MatrixCommon
     __host__ void subtract(double* a, double num, double* b, int m, int n);
     __host__ void multiply(double* a, double num, double* b, int m, int n);
     __host__ void divide(double* a, double num, double* b, int m, int n);
+    
+    __host__ void transpose(double* a, double* b, int m, int n);
 }
