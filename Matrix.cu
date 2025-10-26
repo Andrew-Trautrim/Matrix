@@ -52,6 +52,17 @@ bool Matrix::references(double* a) const
     return data.get() == a;
 }
 
+double Matrix::sum()
+{
+    double sum = 0;
+    for (int i = 0, l = m * n; i < l; ++i)
+    {
+        sum += data.get()[i];
+    }
+
+    return sum;
+}
+
 void Matrix::zero()
 {
     cudaMemset(data.get(), 0, m * n * sizeof(double));

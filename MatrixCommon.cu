@@ -226,6 +226,42 @@ namespace MatrixCommon
         cudaDeviceSynchronize();
     }
 
+    void sum(double* a, double* b, int m, int n, int axis)
+    {
+        if (axis == 0)
+        {
+            // Set kernal parameters
+            int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+            dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+            dim3 BLOCKS(blocks_x);
+
+            // Execute kernal
+            MatrixKernals::sum_vertical<<<BLOCKS,THREADS>>>(a, b, m, n);
+            cudaDeviceSynchronize();
+
+            return;
+        }
+        else if (axis == 1)
+        {
+            // Set kernal parameters
+            int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+            dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+            dim3 BLOCKS(blocks_y);
+
+            // Execute kernal
+            MatrixKernals::sum_horizontal<<<BLOCKS,THREADS>>>(a, b, m, n);
+            cudaDeviceSynchronize();
+
+            return;
+        }
+
+        std::ostringstream err;
+        err << "Unknown axis: " << axis << ".";
+        throw std::invalid_argument(err.str()); 
+    }
+
     void cross_entropy(double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n)
     {
         if (a_m != b_m || a_n != b_n)

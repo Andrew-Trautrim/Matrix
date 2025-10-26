@@ -43,6 +43,7 @@ class MatrixExpr
 
         // Unary expressions
         __host__ UnaryExpr<A> transpose() const;
+        __host__ UnaryExpr<A> sum(int axis) const;
         
         // Num expressions
         __host__ NumExpr<A> operator+(double num) const;
@@ -101,6 +102,9 @@ class Matrix : public MatrixExpr<Matrix>
         using MatrixExpr<Matrix>::operator/;
         
         using MatrixExpr<Matrix>::transpose;
+        using MatrixExpr<Matrix>::sum;
+
+        double sum();
 
         void randomize();
         void randomize(int min, int max);
@@ -335,6 +339,17 @@ UnaryExpr<E> MatrixExpr<E>::transpose() const
     auto eval = [](double* a, double* b, int a_m, int a_n) 
     { 
         MatrixCommon::transpose(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(*this), eval);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::sum(int axis) const
+{
+    auto eval = [axis](double* a, double* b, int a_m, int a_n) 
+    { 
+        MatrixCommon::sum(a, b, a_m, a_n, axis);
     };
 
     return UnaryExpr<E>(static_cast<const E&>(*this), eval);
