@@ -1,0 +1,433 @@
+#ifndef MATRIX_H
+#define MATRIX_H
+
+#include <cuda_runtime.h>
+#include <functional>
+#include <memory>
+#include <iostream>
+#include <unordered_map>
+#include <stack>
+#include <stdexcept>
+
+#include "MatrixCommon.cuh"
+
+class Matrix;
+template<typename L, typename R> class BinaryExpr;
+
+struct Buffer
+{
+    std::shared_ptr<double> data; 
+    size_t size;
+};
+
+template<typename A>
+class MatrixExpr
+{
+    friend class Matrix;
+    template<typename L, typename R> friend class BinaryExpr;
+
+    public:
+        __host__ MatrixExpr(int m, int n);
+        __host__ MatrixExpr();
+
+        template<typename B>
+        __host__ BinaryExpr<A, B> operator+(const MatrixExpr<B>& other) const;
+
+        template<typename B>
+        __host__ BinaryExpr<A, B> operator-(const MatrixExpr<B>& other) const;
+
+        template<typename B>
+        __host__ BinaryExpr<A, B> operator*(const MatrixExpr<B>& other) const;
+
+        template<typename B>
+        __host__ BinaryExpr<A, B> operator&(const MatrixExpr<B>& other) const;
+
+        template<typename B>
+        __host__ BinaryExpr<A, B> operator/(const MatrixExpr<B>& other) const;
+
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool aliases(double* a) const;
+
+    protected:
+        int m;
+        int n;
+
+        __host__ static Buffer getBuffer(int required_size);
+        __host__ static void releaseBuffer(const Buffer& buff);
+
+    private:
+        static std::unordered_map<int, std::stack<Buffer>> buffers;
+};
+
+class Matrix : public MatrixExpr<Matrix>
+{
+    template<typename L, typename R> friend class BinaryExpr;
+
+    public:
+        Matrix();
+        Matrix(int m, int n);
+                
+        template<typename A>
+        Matrix(const MatrixExpr<A>& expr);
+
+        Matrix& operator=(const Matrix& expr);
+
+        template<typename A>
+        Matrix& operator=(const MatrixExpr<A>& expr);
+
+        double* evaluate(const Matrix& result) const;
+        double* evaluate(const Buffer& result) const;
+        bool aliases(double* a) const;
+
+        void randomize(int min, int max);
+        void zero();
+        void print() const;
+    
+    private:
+        std::shared_ptr<double> data; 
+};
+
+template<typename L, typename R>
+class BinaryExpr : public MatrixExpr<BinaryExpr<L, R>>
+{
+    public:
+        BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_aliasing);
+
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool aliases(double* a) const;
+
+    private:
+        const L& lhs;
+        const R& rhs;
+
+        bool self_aliasing; // bool to determine if the expression allowed to reference the result
+
+        std::function<void (double*, double*, double*, int, int, int, int)> eval;
+};
+
+/*
+ * Matix class
+ */
+        
+template<typename A>
+Matrix::Matrix(const MatrixExpr<A>& expr)
+{
+    m = expr.m;
+    n = expr.n;
+
+    double* raw_ptr;
+    cudaError_t err = cudaMallocManaged(&raw_ptr, m * n * sizeof(double));
+    if (err != cudaSuccess)
+    {
+        throw std::runtime_error(cudaGetErrorString(err));
+    }
+
+    auto cuda_deleter = [](double* p)
+    {
+        cudaFree(p);
+    };
+
+    data = std::shared_ptr<double>(raw_ptr, cuda_deleter);
+
+    expr.evaluate(data.get());
+}
+
+template<typename A>
+Matrix& Matrix::operator=(const MatrixExpr<A>& expr)
+{
+    if (m * n != expr.m * expr.n)
+    {
+        double* raw_ptr;
+        cudaError_t err = cudaMallocManaged(&raw_ptr, expr.m * expr.n * sizeof(double));
+        if (err != cudaSuccess)
+        {
+            throw std::runtime_error(cudaGetErrorString(err));
+        }
+
+        auto cuda_deleter = [](double* p)
+        {
+            cudaFree(p);
+        };
+
+        data = std::shared_ptr<double>(raw_ptr, cuda_deleter);
+    }
+
+    m = expr.m;
+    n = expr.n;
+
+    double* result = expr.evaluate(*this);
+    if (result != data.get())
+    {
+        cudaMemcpy(data.get(), result, m * n * sizeof(double), cudaMemcpyHostToHost);
+    }
+
+    return *this;
+}
+
+/*
+ * MatrixExpr class
+ */
+
+// PUBLIC
+
+template<typename A>
+MatrixExpr<A>::MatrixExpr(int m, int n) : m(m), n(n) {}
+
+template<typename A>
+MatrixExpr<A>::MatrixExpr() = default;
+
+template<typename A>
+template<typename B>
+BinaryExpr<A, B> MatrixExpr<A>::operator+(const MatrixExpr<B>& other) const
+{
+    auto eval = [](double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n) 
+    { 
+        MatrixCommon::add(a, b, c, a_m, a_n, b_m, b_n);
+    };
+
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+}
+
+template<typename A>
+template<typename B>
+BinaryExpr<A, B> MatrixExpr<A>::operator-(const MatrixExpr<B>& other) const
+{
+    auto eval = [](double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n) 
+    { 
+        MatrixCommon::subtract(a, b, c, a_m, a_n, b_m, b_n);
+    };
+
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+}
+
+template<typename A>
+template<typename B>
+BinaryExpr<A, B> MatrixExpr<A>::operator*(const MatrixExpr<B>& other) const
+{
+    auto eval = [](double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n) 
+    { 
+        MatrixCommon::multiply(a, b, c, a_m, a_n, b_m, b_n);
+    };
+
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, false);
+}
+
+template<typename A>
+template<typename B>
+BinaryExpr<A, B> MatrixExpr<A>::operator&(const MatrixExpr<B>& other) const
+{
+    auto eval = [](double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n) 
+    { 
+        MatrixCommon::hadamardProduct(a, b, c, a_m, a_n, b_m, b_n);
+    };
+
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+}
+
+template<typename A>
+template<typename B>
+BinaryExpr<A, B> MatrixExpr<A>::operator/(const MatrixExpr<B>& other) const
+{
+    auto eval = [](double* a, double* b, double* c, int a_m, int a_n, int b_m, int b_n) 
+    { 
+        MatrixCommon::divide(a, b, c, a_m, a_n, b_m, b_n);
+    };
+
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, true);
+}
+
+template<typename A>
+double* MatrixExpr<A>::evaluate(const Matrix& result) const
+{
+    return static_cast<const A&>(*this).evaluate(result);
+}
+
+template<typename A>
+double* MatrixExpr<A>::evaluate(const Buffer& result) const
+{
+    return static_cast<const A&>(*this).evaluate(result);
+}
+
+template<typename A>
+bool MatrixExpr<A>::aliases(double* a) const
+{
+    return static_cast<const A&>(*this).aliases(a);
+}
+
+// PROTECTED
+
+template<typename A>
+Buffer MatrixExpr<A>::getBuffer(int required_size)
+{
+    Buffer buff;
+    if (buffers.count(required_size) == 0 || buffers[required_size].empty())
+    {
+        double* raw_ptr;
+        cudaError_t err = cudaMallocManaged(&raw_ptr, required_size * sizeof(double));
+        if (err != cudaSuccess)
+        {
+            throw std::runtime_error(cudaGetErrorString(err));
+        }
+
+        auto cuda_deleter = [](double* p)
+        {
+            cudaFree(p);
+        };
+
+        buff.data = std::shared_ptr<double>(raw_ptr, cuda_deleter);
+    }
+    else
+    {
+        buff = buffers[required_size].top();
+        buffers[required_size].pop();
+    }
+    
+    return buff;
+}
+
+template<typename A>
+void MatrixExpr<A>::releaseBuffer(const Buffer& buff)
+{
+    if (buff.data == nullptr)
+    {
+        return;
+    }
+
+    if (buffers.count(buff.size) == 0)
+    {
+        buffers[buff.size] = std::stack<Buffer>();
+    }
+
+    buffers[buff.size].push(buff);
+}
+
+/*
+ * BinaryExpr class
+ */
+
+template<typename A>
+inline std::unordered_map<int, std::stack<Buffer>> MatrixExpr<A>::buffers;
+
+template<typename L, typename R>
+BinaryExpr<L, R>::BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_aliasing) 
+    : MatrixExpr<BinaryExpr<L, R>>(lhs.m, lhs.n), 
+        lhs(lhs), rhs(rhs), eval(eval), self_aliasing(self_aliasing)
+{
+}
+
+template<typename L, typename R>
+double* BinaryExpr<L, R>::evaluate(const Matrix& result) const 
+{
+    // Evaluate left hand side
+    Buffer lhs_buff { nullptr, 0 };
+    double* lhs_result;
+
+    // Can we use the result as a buffer?
+    if (std::is_same_v<L, Matrix> || (
+            result.m * result.n == lhs.m * lhs.n && 
+            !rhs.aliases(result.data.get())))
+    {
+        lhs_result = lhs.evaluate(result);
+    }
+    else 
+    {
+        lhs_buff = this->getBuffer(lhs.m * lhs.n);
+        lhs_result = lhs.evaluate(lhs_buff);
+    }
+
+    // evaluate right hand side
+    Buffer rhs_buff { nullptr, 0 };
+    double* rhs_result;
+    
+    // Can we use the result as a buffer AND has it not already been used?
+    if (std::is_same_v<R, Matrix> || (
+            lhs_result != result.data.get() && 
+            result.m * result.n == rhs.m * rhs.n && 
+            !lhs.aliases(result.data.get())))
+    {
+        rhs_result = rhs.evaluate(result);
+    }
+    else 
+    {
+        rhs_buff = this->getBuffer(rhs.m * rhs.n);
+        rhs_result = rhs.evaluate(rhs_buff);
+    }
+
+    // if we have something like a = a * b then we must store the result in a buffer
+    Buffer result_buff { nullptr, 0 };
+    double* accumulator = result.data.get();
+    if (!self_aliasing && (lhs_result == result.data.get() || rhs_result == result.data.get()))
+    {
+        result_buff = this->getBuffer(result.m * result.n);
+        accumulator = result_buff.data.get();
+    }
+
+    eval(lhs_result, rhs_result, accumulator, lhs.m, lhs.n, rhs.m, rhs.n);
+
+    this->releaseBuffer(lhs_buff);
+    this->releaseBuffer(rhs_buff);
+    this->releaseBuffer(result_buff);
+
+    return accumulator;
+}
+
+template<typename L, typename R>
+double* BinaryExpr<L, R>::evaluate(const Buffer& result) const 
+{
+    // Evaluate left hand side
+    Buffer lhs_buff { nullptr, 0 };
+    double* lhs_result;
+
+    // Can we use the result as a buffer?
+    if (std::is_same_v<L, Matrix> || result.size == lhs.m * lhs.n)
+    {
+        lhs_result = lhs.evaluate(result);
+    }
+    else 
+    {
+        lhs_buff = this->getBuffer(lhs.m * lhs.n);
+        lhs_result = lhs.evaluate(lhs_buff);
+    }
+
+    // evaluate right hand side
+    Buffer rhs_buff { nullptr, 0 };
+    double* rhs_result;
+    
+    // Can we use the result as a buffer AND has it not already been used?
+    if (std::is_same_v<R, Matrix> || (lhs_result != result.data.get() && result.size == rhs.m * rhs.n))
+    {
+        rhs_result = rhs.evaluate(result);
+    }
+    else 
+    {
+        rhs_buff = this->getBuffer(rhs.m * rhs.n);
+        rhs_result = rhs.evaluate(rhs_buff);
+    }
+    
+    // if we have something like a = a * b then we must store the result in a buffer
+    Buffer result_buff { nullptr, 0 };
+    double* accumulator = result.data.get();
+    if (!self_aliasing && (lhs_result == result.data.get() || rhs_result == result.data.get()))
+    {
+        result_buff = this->getBuffer(result.size);
+        accumulator = result_buff.data.get();
+    }
+
+    eval(lhs_result, rhs_result, accumulator, lhs.m, lhs.n, rhs.m, rhs.n);
+
+    this->releaseBuffer(lhs_buff);
+    this->releaseBuffer(rhs_buff);
+    this->releaseBuffer(result_buff);
+
+    return accumulator;
+}
+
+template<typename L, typename R>
+bool BinaryExpr<L, R>::aliases(double* a) const
+{
+    return lhs.aliases(a) || rhs.aliases(a);
+}
+
+#endif // MATRIX_H
