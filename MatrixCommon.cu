@@ -225,4 +225,102 @@ namespace MatrixCommon
         MatrixKernals::transpose<<<BLOCKS,THREADS>>>(a, b, m, n);
         cudaDeviceSynchronize();
     }
+
+    __host__ void sigmoid(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::sigmoid<<<BLOCKS,THREADS>>>(a, b, m, n);
+        cudaDeviceSynchronize();
+    }
+
+    __host__ void d_sigmoid(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::d_sigmoid<<<BLOCKS,THREADS>>>(a, b, m, n);
+        cudaDeviceSynchronize();
+    }
+
+    __host__ void tanh(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::tanh<<<BLOCKS,THREADS>>>(a, b, m, n);
+        cudaDeviceSynchronize();
+    }
+
+    __host__ void d_tanh(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::d_tanh<<<BLOCKS,THREADS>>>(a, b, m, n);
+        cudaDeviceSynchronize();
+    }
+
+    __host__ void relu(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::relu<<<BLOCKS,THREADS>>>(a, b, m, n);
+        cudaDeviceSynchronize();
+    }
+
+    __host__ void d_relu(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::d_relu<<<BLOCKS,THREADS>>>(a, b, m, n);
+        cudaDeviceSynchronize();
+    }
+
+    __host__ void log(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x, blocks_y);
+
+        // Execute kernal
+        MatrixKernals::log<<<BLOCKS,THREADS>>>(a, b, m, n);
+        cudaDeviceSynchronize();
+    }
 }

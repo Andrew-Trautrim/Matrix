@@ -50,9 +50,13 @@ class MatrixExpr
         __host__ NumExpr<A> operator/(double num) const;
         __host__ NumExpr<A> operator-(double num) const;
 
-        __host__ double* evaluate(const Matrix& result) const;
-        __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool aliases(double* a) const;
+        // Static unary expressions
+        static __host__ UnaryExpr<A> sigmoid(const MatrixExpr<A>& a);
+        static __host__ UnaryExpr<A> d_sigmoid(const MatrixExpr<A>& a);
+        static __host__ UnaryExpr<A> tanh(const MatrixExpr<A>& a);
+        static __host__ UnaryExpr<A> d_tanh(const MatrixExpr<A>& a);
+        static __host__ UnaryExpr<A> relu(const MatrixExpr<A>& a);
+        static __host__ UnaryExpr<A> d_relu(const MatrixExpr<A>& a);
 
     protected:
         int m;
@@ -63,13 +67,18 @@ class MatrixExpr
 
     private:
         static std::unordered_map<int, std::stack<Buffer>> buffers;
+        
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool aliases(double* a) const;
 };
 
 class Matrix : public MatrixExpr<Matrix>
 {
-    template<typename L, typename R> friend class BinaryExpr;
-    template<typename E> friend class UnaryExpr;
+    template<typename E> friend class MatrixExpr;
     template<typename E> friend class NumExpr;
+    template<typename E> friend class UnaryExpr;
+    template<typename L, typename R> friend class BinaryExpr;
 
     public:
         Matrix();
@@ -90,27 +99,29 @@ class Matrix : public MatrixExpr<Matrix>
         
         using MatrixExpr<Matrix>::transpose;
 
-        double* evaluate(const Matrix& result) const;
-        double* evaluate(const Buffer& result) const;
-        bool aliases(double* a) const;
-
+        void randomize();
         void randomize(int min, int max);
         void zero();
         void print() const;
     
     private:
         std::shared_ptr<double> data; 
+
+        double* evaluate(const Matrix& result) const;
+        double* evaluate(const Buffer& result) const;
+        bool aliases(double* a) const;
 };
 
 template<typename L, typename R>
 class BinaryExpr : public MatrixExpr<BinaryExpr<L, R>>
 {
+    friend class Matrix;
+    template<typename E> friend class MatrixExpr;
+    template<typename E> friend class NumExpr;
+    template<typename E> friend class UnaryExpr;
+
     public:
         BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_aliasing);
-
-        __host__ double* evaluate(const Matrix& result) const;
-        __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool aliases(double* a) const;
 
     private:
         const L& lhs;
@@ -119,39 +130,53 @@ class BinaryExpr : public MatrixExpr<BinaryExpr<L, R>>
         bool self_aliasing; // bool to determine if the expression allowed to reference the result
 
         std::function<void (double*, double*, double*, int, int, int, int)> eval;
+
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool aliases(double* a) const;
+};
+
+template<typename E>
+class UnaryExpr : public MatrixExpr<UnaryExpr<E>>
+{
+    friend class Matrix;
+    template<typename A> friend class MatrixExpr;
+    template<typename A> friend class NumExpr;
+    template<typename L, typename R> friend class BinaryExpr;
+
+    public:
+        UnaryExpr(const E& expr, std::function<void (double*, double*, int, int)> eval);
+
+    private:
+        const E& expr;
+
+        std::function<void (double*, double*, int, int)> eval;
+
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool aliases(double* a) const;
 };
 
 template<typename E>
 class NumExpr : public MatrixExpr<NumExpr<E>>
 {
+    friend class Matrix;
+    template<typename A> friend class MatrixExpr;
+    template<typename A> friend class UnaryExpr;
+    template<typename L, typename R> friend class BinaryExpr;
+
     public:
         NumExpr(const E& expr, std::function<void (double*, double, double*, int, int)> eval, double num);
-
-        __host__ double* evaluate(const Matrix& result) const;
-        __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool aliases(double* a) const;
 
     private:
         const E& expr;
         double num;
 
         std::function<void (double*, double, double*, int, int)> eval;
-};
-
-template<typename E>
-class UnaryExpr : public MatrixExpr<UnaryExpr<E>>
-{
-    public:
-        UnaryExpr(const E& expr, std::function<void (double*, double*, int, int)> eval);
 
         __host__ double* evaluate(const Matrix& result) const;
         __host__ double* evaluate(const Buffer& result) const;
         __host__ bool aliases(double* a) const;
-
-    private:
-        const E& expr;
-
-        std::function<void (double*, double*, int, int)> eval;
 };
 
 /*
@@ -178,7 +203,11 @@ Matrix::Matrix(const MatrixExpr<A>& expr)
 
     data = std::shared_ptr<double>(raw_ptr, cuda_deleter);
 
-    expr.evaluate(data.get());
+    double* result = expr.evaluate(*this);
+    if (result != data.get())
+    {
+        cudaMemcpy(data.get(), result, m * n * sizeof(double), cudaMemcpyHostToHost);
+    }
 }
 
 template<typename A>
@@ -294,6 +323,72 @@ UnaryExpr<E> MatrixExpr<E>::transpose() const
     };
 
     return UnaryExpr<E>(static_cast<const E&>(*this), eval);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::sigmoid(const MatrixExpr<E>& expr)
+{
+    auto eval = [](double* a, double* b, int a_m, int a_n) 
+    {
+        MatrixCommon::sigmoid(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(expr), eval);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::d_sigmoid(const MatrixExpr<E>& expr)
+{
+    auto eval = [](double* a, double* b, int a_m, int a_n) 
+    { 
+        MatrixCommon::d_sigmoid(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(expr), eval);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::tanh(const MatrixExpr<E>& expr)
+{
+    auto eval = [](double* a, double* b, int a_m, int a_n) 
+    { 
+        MatrixCommon::tanh(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(expr), eval);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::d_tanh(const MatrixExpr<E>& expr)
+{
+    auto eval = [](double* a, double* b, int a_m, int a_n) 
+    { 
+        MatrixCommon::d_tanh(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(expr), eval);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::relu(const MatrixExpr<E>& expr)
+{
+    auto eval = [](double* a, double* b, int a_m, int a_n) 
+    { 
+        MatrixCommon::relu(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(expr), eval);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::d_relu(const MatrixExpr<E>& expr)
+{
+    auto eval = [](double* a, double* b, int a_m, int a_n) 
+    { 
+        MatrixCommon::d_relu(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(expr), eval);
 }
 
 template<typename E>

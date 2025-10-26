@@ -57,6 +57,27 @@ void Matrix::zero()
     cudaMemset(data.get(), 0, m * n * sizeof(double));
 }
 
+void Matrix::randomize()
+{
+    // Set kernal parameters
+    int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+    int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+    dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+    dim3 BLOCKS(blocks_x, blocks_y);
+
+    // Setup seeds
+    curandState *states;
+    cudaMalloc(&states, m * n * sizeof(curandState));
+    MatrixKernals::setup_random_states<<<BLOCKS,THREADS>>>(states, seed++, m, n);
+    cudaDeviceSynchronize();
+
+    MatrixKernals::randomize_normal<<<BLOCKS,THREADS>>>(states, data.get(), m, n);
+    cudaDeviceSynchronize();
+
+    cudaFree(states);
+}
+
 void Matrix::randomize(int min, int max)
 {
     // Set kernal parameters

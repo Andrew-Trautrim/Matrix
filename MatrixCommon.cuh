@@ -14,4 +14,11 @@ namespace MatrixCommon
     __host__ void divide(double* a, double num, double* b, int m, int n);
     
     __host__ void transpose(double* a, double* b, int m, int n);
+    
+    __host__ void sigmoid(double* a, double* b, int m, int n);
+    __host__ void d_sigmoid(double* a, double* b, int m, int n);
+    __host__ void tanh(double* a, double* b, int m, int n);
+    __host__ void d_tanh(double* a, double* b, int m, int n);
+    __host__ void relu(double* a, double* b, int m, int n);
+    __host__ void d_relu(double* a, double* b, int m, int n);
 }
