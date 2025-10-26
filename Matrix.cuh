@@ -104,6 +104,9 @@ class Matrix : public MatrixExpr<Matrix>
         using MatrixExpr<Matrix>::transpose;
         using MatrixExpr<Matrix>::sum;
 
+        int cols();
+        int rows();
+
         double sum();
 
         void randomize();

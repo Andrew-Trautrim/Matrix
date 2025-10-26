@@ -63,6 +63,16 @@ double Matrix::sum()
     return sum;
 }
 
+int Matrix::rows()
+{
+    return m;
+}
+
+int Matrix::cols()
+{
+    return n;
+}
+
 void Matrix::zero()
 {
     cudaMemset(data.get(), 0, m * n * sizeof(double));
