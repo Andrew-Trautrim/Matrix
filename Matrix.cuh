@@ -51,6 +51,10 @@ class MatrixExpr
         __host__ NumExpr<A> operator/(double num) const;
         __host__ NumExpr<A> operator-(double num) const;
 
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool references(double* a) const;
+
         // Static binary expressions
         template<typename B> static __host__ BinaryExpr<A, B> cross_entropy(const MatrixExpr<A>& a, const MatrixExpr<B>& b);
 
@@ -71,10 +75,6 @@ class MatrixExpr
 
     private:
         static std::unordered_map<int, std::stack<Buffer>> buffers;
-        
-        __host__ double* evaluate(const Matrix& result) const;
-        __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool references(double* a) const;
 };
 
 class Matrix : public MatrixExpr<Matrix>
@@ -116,13 +116,13 @@ class Matrix : public MatrixExpr<Matrix>
         void randomize(int min, int max);
         void zero();
         void print() const;
-    
-    private:
-        std::shared_ptr<double> data; 
 
         double* evaluate(const Matrix& result) const;
         double* evaluate(const Buffer& result) const;
         bool references(double* a) const;
+    
+    private:
+        std::shared_ptr<double> data; 
 };
 
 template<typename L, typename R>
@@ -136,6 +136,10 @@ class BinaryExpr : public MatrixExpr<BinaryExpr<L, R>>
     public:
         BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_referencing = true);
 
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool references(double* a) const;
+
     private:
         const L& lhs;
         const R& rhs;
@@ -143,10 +147,6 @@ class BinaryExpr : public MatrixExpr<BinaryExpr<L, R>>
         bool self_referencing; // bool to determine if the expression allowed to reference the result
 
         std::function<void (double*, double*, double*, int, int, int, int)> eval;
-
-        __host__ double* evaluate(const Matrix& result) const;
-        __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool references(double* a) const;
 };
 
 template<typename E>
@@ -159,15 +159,16 @@ class UnaryExpr : public MatrixExpr<UnaryExpr<E>>
 
     public:
         UnaryExpr(const E& expr, std::function<void (double*, double*, int, int)> eval);
+        UnaryExpr(const E& expr, std::function<void (double*, double*, int, int)> eval, int m, int n);
+
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool references(double* a) const;
 
     private:
         const E& expr;
 
         std::function<void (double*, double*, int, int)> eval;
-
-        __host__ double* evaluate(const Matrix& result) const;
-        __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool references(double* a) const;
 };
 
 template<typename E>
@@ -181,15 +182,15 @@ class NumExpr : public MatrixExpr<NumExpr<E>>
     public:
         NumExpr(const E& expr, std::function<void (double*, double, double*, int, int)> eval, double num);
 
+        __host__ double* evaluate(const Matrix& result) const;
+        __host__ double* evaluate(const Buffer& result) const;
+        __host__ bool references(double* a) const;
+
     private:
         const E& expr;
         double num;
 
         std::function<void (double*, double, double*, int, int)> eval;
-
-        __host__ double* evaluate(const Matrix& result) const;
-        __host__ double* evaluate(const Buffer& result) const;
-        __host__ bool references(double* a) const;
 };
 
 /*
@@ -358,7 +359,7 @@ UnaryExpr<E> MatrixExpr<E>::sum(int axis) const
         MatrixCommon::sum(a, b, a_m, a_n, axis);
     };
 
-    return UnaryExpr<E>(static_cast<const E&>(*this), eval);
+    return UnaryExpr<E>(static_cast<const E&>(*this), eval, axis == 0 ? 1 : m, axis == 1 ? 1 : n);
 }
 
 template<typename E>
@@ -737,6 +738,13 @@ bool NumExpr<E>::references(double* a) const
 template<typename E>
 UnaryExpr<E>::UnaryExpr(const E& expr, std::function<void (double*, double*, int, int)> eval) 
     : MatrixExpr<UnaryExpr<E>>(expr.m, expr.n), 
+        expr(expr), eval(eval)
+{
+}
+
+template<typename E>
+UnaryExpr<E>::UnaryExpr(const E& expr, std::function<void (double*, double*, int, int)> eval, int m, int n) 
+    : MatrixExpr<UnaryExpr<E>>(m, n), 
         expr(expr), eval(eval)
 {
 }
