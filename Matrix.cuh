@@ -107,6 +107,9 @@ class Matrix : public MatrixExpr<Matrix>
         int cols();
         int rows();
 
+        void set(int i, int j, double value);
+        double get(int i, int j);
+
         double sum();
 
         void randomize();

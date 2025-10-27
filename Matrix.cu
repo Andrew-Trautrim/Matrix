@@ -73,6 +73,16 @@ int Matrix::cols()
     return n;
 }
 
+void Matrix::set(int i, int j, double value)
+{
+    data.get()[i * n + j] = value;
+}
+
+double Matrix::get(int i, int j)
+{
+    return data.get()[i * n + j];
+}
+
 void Matrix::zero()
 {
     cudaMemset(data.get(), 0, m * n * sizeof(double));
