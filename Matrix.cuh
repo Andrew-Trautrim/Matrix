@@ -26,6 +26,7 @@ template<typename A>
 class MatrixExpr
 {
     friend class Matrix;
+    template<typename E> friend class MatrixExpr;
     template<typename L, typename R> friend class BinaryExpr;
     template<typename E> friend class UnaryExpr;
     template<typename E> friend class NumExpr;
@@ -71,10 +72,10 @@ class MatrixExpr
         int n;
 
         __host__ static Buffer getBuffer(int required_size);
-        __host__ static void releaseBuffer(const Buffer& buff);
+        __host__ static void releaseBuffer(Buffer buff);
 
     private:
-        static std::unordered_map<int, std::stack<Buffer>> buffers;
+        static std::stack<Buffer> buffers;
 };
 
 class Matrix : public MatrixExpr<Matrix>
@@ -135,6 +136,7 @@ class BinaryExpr : public MatrixExpr<BinaryExpr<L, R>>
 
     public:
         BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_referencing = true);
+        BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, int m, int n, bool self_referencing = true);
 
         __host__ double* evaluate(const Matrix& result) const;
         __host__ double* evaluate(const Buffer& result) const;
@@ -301,7 +303,7 @@ BinaryExpr<A, B> MatrixExpr<A>::operator*(const MatrixExpr<B>& other) const
         MatrixCommon::multiply(a, b, c, a_m, a_n, b_m, b_n);
     };
 
-    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, false);
+    return BinaryExpr<A, B>(static_cast<const A&>(*this), static_cast<const B&>(other), eval, m, other.n, false);
 }
 
 template<typename A>
@@ -348,7 +350,7 @@ UnaryExpr<E> MatrixExpr<E>::transpose() const
         MatrixCommon::transpose(a, b, a_m, a_n);
     };
 
-    return UnaryExpr<E>(static_cast<const E&>(*this), eval);
+    return UnaryExpr<E>(static_cast<const E&>(*this), eval, n, m);
 }
 
 template<typename E>
@@ -495,8 +497,14 @@ bool MatrixExpr<A>::references(double* a) const
 template<typename A>
 Buffer MatrixExpr<A>::getBuffer(int required_size)
 {
-    Buffer buff;
-    if (buffers.count(required_size) == 0 || buffers[required_size].empty())
+    Buffer buff { nullptr, 0 };
+    if (!buffers.empty())
+    {
+        buff = buffers.top();
+        buffers.pop();
+    }
+
+    if (buff.size < required_size)
     {
         double* raw_ptr;
         cudaError_t err = cudaMallocManaged(&raw_ptr, required_size * sizeof(double));
@@ -510,31 +518,22 @@ Buffer MatrixExpr<A>::getBuffer(int required_size)
             cudaFree(p);
         };
 
+        buff.size = required_size;
         buff.data = std::shared_ptr<double>(raw_ptr, cuda_deleter);
-    }
-    else
-    {
-        buff = buffers[required_size].top();
-        buffers[required_size].pop();
     }
     
     return buff;
 }
 
 template<typename A>
-void MatrixExpr<A>::releaseBuffer(const Buffer& buff)
+void MatrixExpr<A>::releaseBuffer(Buffer buff)
 {
     if (buff.data == nullptr)
     {
         return;
     }
 
-    if (buffers.count(buff.size) == 0)
-    {
-        buffers[buff.size] = std::stack<Buffer>();
-    }
-
-    buffers[buff.size].push(buff);
+    buffers.push(buff);
 }
 
 /*
@@ -542,11 +541,18 @@ void MatrixExpr<A>::releaseBuffer(const Buffer& buff)
  */
 
 template<typename A>
-inline std::unordered_map<int, std::stack<Buffer>> MatrixExpr<A>::buffers;
+inline std::stack<Buffer> MatrixExpr<A>::buffers;
 
 template<typename L, typename R>
 BinaryExpr<L, R>::BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, bool self_referencing) 
     : MatrixExpr<BinaryExpr<L, R>>(lhs.m, lhs.n), 
+        lhs(lhs), rhs(rhs), eval(eval), self_referencing(self_referencing)
+{
+}
+
+template<typename L, typename R>
+BinaryExpr<L, R>::BinaryExpr(const L& lhs, const R& rhs, std::function<void (double*, double*, double*, int, int, int, int)> eval, int m, int n, bool self_referencing) 
+    : MatrixExpr<BinaryExpr<L, R>>(m, n), 
         lhs(lhs), rhs(rhs), eval(eval), self_referencing(self_referencing)
 {
 }
