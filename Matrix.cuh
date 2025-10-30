@@ -60,6 +60,7 @@ class MatrixExpr
         template<typename B> static __host__ BinaryExpr<A, B> cross_entropy(const MatrixExpr<A>& a, const MatrixExpr<B>& b);
 
         // Static unary expressions
+        static __host__ UnaryExpr<A> softmax(const MatrixExpr<A>& a);
         static __host__ UnaryExpr<A> sigmoid(const MatrixExpr<A>& a);
         static __host__ UnaryExpr<A> d_sigmoid(const MatrixExpr<A>& a);
         static __host__ UnaryExpr<A> tanh(const MatrixExpr<A>& a);
@@ -362,6 +363,17 @@ UnaryExpr<E> MatrixExpr<E>::sum(int axis) const
     };
 
     return UnaryExpr<E>(static_cast<const E&>(*this), eval, axis == 0 ? 1 : m, axis == 1 ? 1 : n);
+}
+
+template<typename E>
+UnaryExpr<E> MatrixExpr<E>::softmax(const MatrixExpr<E>& expr)
+{
+    auto eval = [](double* a, double* b, int a_m, int a_n) 
+    {
+        MatrixCommon::softmax(a, b, a_m, a_n);
+    };
+
+    return UnaryExpr<E>(static_cast<const E&>(expr), eval);
 }
 
 template<typename E>

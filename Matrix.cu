@@ -75,12 +75,12 @@ int Matrix::cols()
 
 void Matrix::set(int i, int j, double value)
 {
-    data.get()[i * n + j] = value;
+    data.get()[j * m + i] = value;
 }
 
 double Matrix::get(int i, int j)
 {
-    return data.get()[i * n + j];
+    return data.get()[j * m + i];
 }
 
 void Matrix::zero()
@@ -134,12 +134,12 @@ void Matrix::randomize(int min, int max)
 void Matrix::print() const
 {
     std::cout << std::fixed << std::setprecision(5);
-    for (int i = 0; i < m * n; ++i)
+    for (int i = 0; i < m; ++i)
     {
-        std::cout << std::setw(10) << data.get()[i] << "  ";
-        if ((i+1) % n == 0)
+        for (int j = 0; j < n; ++j)
         {
-            std::cout << std::endl;
+            std::cout << std::setw(10) << data.get()[j * m + i] << "  ";
         }
+        std::cout << std::endl;
     }
 }

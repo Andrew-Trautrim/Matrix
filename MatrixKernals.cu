@@ -15,7 +15,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         c[i] = a[i] + b[i]; 
     }
     
@@ -30,7 +30,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         c[i] = a[i] + b[row]; 
     }
     
@@ -45,7 +45,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         c[i] = a[i] + b[col]; 
     }
 
@@ -60,7 +60,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         c[i] = a[i] - b[i]; 
     }
 
@@ -75,7 +75,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         c[i] = a[i] - b[row]; 
     }
 
@@ -90,7 +90,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         c[i] = a[i] - b[col]; 
     }
     
@@ -105,12 +105,13 @@ namespace MatrixKernals
             return;
         }
 
-        int idx = row * b_n + col;
-        c[idx] = 0;
+        double result = 0;
         for (int i = 0; i < a_n; ++i)
         {
-            c[idx] += a[row * a_n + i] * b[i * b_n + col];
+            result += a[i * a_m + row] * b[col * b_m + i];
         }
+
+        c[col * a_m + row] = result;
     }
 
     __global__ void hadamardProduct(double* a, double* b, double* c, int m, int n)
@@ -124,7 +125,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         c[i] = a[i] * b[i]; 
     }
 
@@ -139,7 +140,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         c[i] = a[i] / b[i]; 
     }
 
@@ -154,7 +155,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         b[i] = a[i] + num; 
     }
 
@@ -169,7 +170,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         b[i] = a[i] - num; 
     }
 
@@ -184,7 +185,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         b[i] = a[i] * num; 
     }
 
@@ -199,7 +200,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         b[i] = a[i] / num; 
     }
 
@@ -214,7 +215,7 @@ namespace MatrixKernals
             return;
         }
 
-        b[col * m + row] = a[row * n + col];
+        b[row * n + col] = a[col * m + row];
     }
 
     __global__ void row(double* a, double* b, int row, int m, int n)
@@ -227,7 +228,7 @@ namespace MatrixKernals
             return;
         }
 
-        b[col] = a[row * n + col];
+        b[col] = a[col * m + row];
     }
 
     __global__ void col(double* a, double* b, int col, int m, int n)
@@ -240,7 +241,7 @@ namespace MatrixKernals
             return;
         }
 
-        b[row] = a[row * n + col];
+        b[row] = a[col * m + row];
     }
     
     __global__ void setup_random_states(curandState* state, unsigned long seed, int m, int n)
@@ -312,9 +313,9 @@ namespace MatrixKernals
         }
 
         // L(y_hat, y) = y * log(y_hat) + (1 - y) * log(1 - y_hat)
-        int i = row * n + col;
-        double a_capped = fmaxf(fminf(a[i], 1.0f - 1e-7f), 1e-7f); // make sure a[i] can't be too close to 0 or 1
-        c[i] = -1 * (b[i] * logf(a_capped) + (1 - b[i]) * logf(1 - a_capped));
+        int i = col * m + row;
+        double a_capped = max(min(a[i], 1.0f - 1e-7f), 1e-7f); // make sure a[i] can't be too close to 0 or 1
+        c[i] = -1 * (b[i] * log(a_capped) + (1 - b[i]) * log(1 - a_capped));
     }
 
     __global__ void sigmoid(double* a, double* b, int m, int n)
@@ -328,7 +329,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         b[i] = 1 / (1 + exp(-1 * a[i])); 
     }
 
@@ -343,7 +344,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         double s = 1 / (1 + exp(-1 * a[i]));
         b[i] =  s * (1 - s); // d/dx (sigmoid) = sigmoid * (1 - sigmoid) 
     }
@@ -359,7 +360,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         b[i] = tanhf(a[i]);
     }
 
@@ -374,7 +375,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
 
         // d/dx (tan_h) = 1 - tan_h^2
         double tanh_x = tanhf(a[i]);
@@ -392,7 +393,7 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         b[i] = a[i] > 0 ? a[i] : 0;
     }
 
@@ -407,23 +408,40 @@ namespace MatrixKernals
             return;
         }
 
-        int i = row * n + col;
+        int i = col * m + row;
         b[i] = a[i] > 0 ? 1 : 0;
     }
 
-    __global__ void log(double* a, double* b, int m, int n)
+    __global__ void softmax(double* a, double* b, int m, int n)
     {
-        // Calculate row + col for each thread
-        int row = blockIdx.y * blockDim.y + threadIdx.y;
+        // Calculate col for each thread
         int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-        if (row >= m || col >= n)
+        if (col >= n)
         {
             return;
         }
 
-        int i = row * n + col;
-        b[i] = logf(a[i]);
+        // get max value of column for stability
+        double max_val = -1e308;
+        for (int i = 0; i < m; ++i)
+        {
+            max_val = fmaxf(max_val, a[col * m + i]);
+        }
+        
+        // exponential each value (using max_val for stability)
+        double sum = 0;
+        for (int i = 0; i < m; ++i)
+        {
+            b[col * m + i] = exp(a[col * m + i] - max_val);
+            sum += b[col * m + i];
+        }
+
+        // divide each entry by sum
+        for (int i = 0; i < m; ++i)
+        {
+            b[col * m + i] /= sum;
+        }
     }
 
     __global__ void sum_vertical(double* a, double* b, int m, int n)
@@ -436,10 +454,13 @@ namespace MatrixKernals
             return;
         }
 
+        double result = 0;
         for (int i = 0; i < m; ++i)
         {
-            b[col] += a[i * n + col];
+            result += a[col * m + i];
         }
+
+        b[col] = result;
     }
 
     __global__ void sum_horizontal(double* a, double* b, int m, int n)
@@ -452,9 +473,12 @@ namespace MatrixKernals
             return;
         }
 
+        double result = 0;
         for (int i = 0; i < n; ++i)
         {
-            b[row] += a[row * n + i];
+            result += a[i * m + row];
         }
+
+        b[row] = result;
     }
 }

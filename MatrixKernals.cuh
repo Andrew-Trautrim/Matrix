@@ -32,6 +32,8 @@ namespace MatrixKernals
 
     __global__ void cross_entropy(double* a, double* b, double* c, int m, int n);
 
+    __global__ void softmax(double* a, double* b, int m, int n);
+
     __global__ void sigmoid(double* a, double* b, int m, int n);
     __global__ void d_sigmoid(double* a, double* b, int m, int n);
 
@@ -40,8 +42,6 @@ namespace MatrixKernals
 
     __global__ void relu(double* a, double* b, int m, int n);
     __global__ void d_relu(double* a, double* b, int m, int n);
-
-    __global__ void log(double* a, double* b, int m, int n);
 
     __global__ void sum_vertical(double* a, double* b, int m, int n);
     __global__ void sum_horizontal(double* a, double* b, int m, int n);

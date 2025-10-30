@@ -23,12 +23,12 @@ namespace MatrixCommon
             MatrixKernals::add<<<BLOCKS,THREADS>>>(a, b, c, a_m, a_n);
             cudaDeviceSynchronize();
         }
-        else if (a_m == b_m && a_n == 1)
+        else if (a_m == b_m && b_n == 1)
         {
             MatrixKernals::add_broadcast_horizontal<<<BLOCKS,THREADS>>>(a, b, c, a_m, a_n);
             cudaDeviceSynchronize();
         }
-        else if (a_n == b_n && a_m == 1)
+        else if (a_n == b_n && b_m == 1)
         {
             MatrixKernals::add_broadcast_vertical<<<BLOCKS,THREADS>>>(a, b, c, a_m, a_n);
             cudaDeviceSynchronize();
@@ -38,7 +38,7 @@ namespace MatrixCommon
             std::ostringstream err;
             err << "Invalid dimensions: cannot add "
                 << a_m << "x" << a_n
-                << " matrix to "
+                << " matrix and "
                 << b_m << "x" << b_n
                 << " matrix.";
             throw std::invalid_argument(err.str()); 
@@ -233,7 +233,7 @@ namespace MatrixCommon
             // Set kernal parameters
             int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
 
-            dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+            dim3 THREADS(THREADS_PER_DIM);
             dim3 BLOCKS(blocks_x);
 
             // Execute kernal
@@ -247,7 +247,7 @@ namespace MatrixCommon
             // Set kernal parameters
             int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
 
-            dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
+            dim3 THREADS(THREADS_PER_DIM);
             dim3 BLOCKS(blocks_y);
 
             // Execute kernal
@@ -284,6 +284,19 @@ namespace MatrixCommon
 
         // Execute kernal
         MatrixKernals::cross_entropy<<<BLOCKS,THREADS>>>(a, b, c, a_m, a_n);
+        cudaDeviceSynchronize();
+    }
+
+    void softmax(double* a, double* b, int m, int n)
+    {
+        // Set kernal parameters
+        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
+
+        dim3 THREADS(THREADS_PER_DIM);
+        dim3 BLOCKS(blocks_x);
+
+        // Execute exp kernal
+        MatrixKernals::softmax<<<BLOCKS,THREADS>>>(a, b, m, n);
         cudaDeviceSynchronize();
     }
 
@@ -368,20 +381,6 @@ namespace MatrixCommon
 
         // Execute kernal
         MatrixKernals::d_relu<<<BLOCKS,THREADS>>>(a, b, m, n);
-        cudaDeviceSynchronize();
-    }
-
-    void log(double* a, double* b, int m, int n)
-    {
-        // Set kernal parameters
-        int blocks_y = (m + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
-        int blocks_x = (n + THREADS_PER_DIM - 1) / THREADS_PER_DIM;
-
-        dim3 THREADS(THREADS_PER_DIM, THREADS_PER_DIM);
-        dim3 BLOCKS(blocks_x, blocks_y);
-
-        // Execute kernal
-        MatrixKernals::log<<<BLOCKS,THREADS>>>(a, b, m, n);
         cudaDeviceSynchronize();
     }
 }
