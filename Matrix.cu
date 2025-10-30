@@ -83,6 +83,19 @@ double Matrix::get(int i, int j)
     return data.get()[j * m + i];
 }
 
+Matrix Matrix::slice(int i, int j)
+{
+    Matrix result;
+
+    double* raw_ptr = &(data.get()[i * m]);
+    result.data = std::shared_ptr<double>(raw_ptr, [](double*){});
+
+    result.m = m;
+    result.n = j - i;
+
+    return result;
+}
+
 void Matrix::zero()
 {
     cudaMemset(data.get(), 0, m * n * sizeof(double));

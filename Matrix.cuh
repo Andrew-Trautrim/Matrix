@@ -112,6 +112,10 @@ class Matrix : public MatrixExpr<Matrix>
         void set(int i, int j, double value);
         double get(int i, int j);
 
+        // Take a vertical slice of the matrix between column i and j, not including j
+        // Returns a shallow copy
+        Matrix slice(int i, int j);
+
         double sum();
 
         void randomize();
